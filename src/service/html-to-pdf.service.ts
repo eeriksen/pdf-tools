@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import puppeteer, { Page, PaperFormat } from "puppeteer";
 
-const { ACCESS_KEY } = process.env;
-
 export const htmlToPdf = async (
     req: Request,
     res: Response,
@@ -16,7 +14,6 @@ export const htmlToPdf = async (
         scale = 1,
         event = null,
         margin = 0,
-        access_key = null,
     } = req.query as unknown as {
         url?: string;
         format: PaperFormat;
@@ -25,14 +22,7 @@ export const htmlToPdf = async (
         scale: number;
         event: string | null;
         margin: number;
-        access_key: string | null;
     };
-
-    // Validate access key
-    console.log("ACCESS KEY", ACCESS_KEY);
-    if (ACCESS_KEY && ACCESS_KEY !== access_key) {
-        return next(new Error("Invalid access key."));
-    }
 
     // Check URL
     if (!url) {
