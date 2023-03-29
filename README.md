@@ -26,4 +26,5 @@ background = false
 scale = 1
 event = null
 margin = 0
+lang = "en"
 ```

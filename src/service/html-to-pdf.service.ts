@@ -14,6 +14,7 @@ export const htmlToPdf = async (
         scale = 1,
         event = null,
         margin = 0,
+        lang = "en",
     } = req.query as unknown as {
         url?: string;
         format: PaperFormat;
@@ -22,6 +23,7 @@ export const htmlToPdf = async (
         scale: number;
         event: string | null;
         margin: number;
+        lang: string;
     };
 
     // Check URL
@@ -32,8 +34,9 @@ export const htmlToPdf = async (
     }
 
     const browser = await puppeteer.launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: ["--no-sandbox", "--disable-setuid-sandbox", `--lang=${lang}`],
     });
+
     const page = await browser.newPage();
 
     await page.goto(url, {
