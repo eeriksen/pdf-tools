@@ -1,8 +1,8 @@
 FROM node:hydrogen-alpine
 ENV PORT 1234
 
-# Installs latest Chromium (100) package.
-RUN apk add chromium
+# Installs latest Chromium
+RUN apk add chromium chromium-lang
 
 # Tell Puppeteer to skip installing Chrome. We'll be using the installed package.
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true

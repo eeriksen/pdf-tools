@@ -30,14 +30,18 @@ export const htmlToPdf = async (
     if (!url) {
         return next(new Error("Missing parameter: url"));
     } else {
-        console.log("Converting URL to PDF: " + url);
+        console.log(`Converting URL to PDF (${lang}): ${url}`);
     }
 
     const browser = await puppeteer.launch({
         args: ["--no-sandbox", "--disable-setuid-sandbox", `--lang=${lang}`],
+        env: { LANG: lang, LANGUAGE: lang },
     });
 
     const page = await browser.newPage();
+    await page.setExtraHTTPHeaders({
+        "Accept-Language": lang,
+    });
 
     await page.goto(url, {
         waitUntil: "networkidle2",
