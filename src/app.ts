@@ -1,10 +1,4 @@
-import express, {
-    Application,
-    Express,
-    NextFunction,
-    Request,
-    Response,
-} from "express";
+import express, { Application, Express, Request, Response } from "express";
 import { htmlToPdf } from "./service/html-to-pdf.service";
 
 const createServer = (): Application => {
