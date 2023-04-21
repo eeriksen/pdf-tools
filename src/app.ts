@@ -6,6 +6,8 @@ const createServer = (): Application => {
     app.use(express.json());
 
     app.get("/html-to-pdf", htmlToPdf);
+    app.get("/favicon.ico", (_, res: Response) => res.status(204).end());
+    app.get("/ping", (_, res: Response) => res.send("pong"));
 
     // Error handler
     app.use((err: Error, req: Request, res: Response) => {
