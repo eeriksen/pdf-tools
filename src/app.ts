@@ -8,7 +8,7 @@ const createServer = (
     const server = serve({
         port,
         reusePort,
-        idleTimeout: 300, // Allow long-running PDF conversions (default: 10s)
+        idleTimeout: 255, // Allow long-running PDF conversions (default: 10s)
         async fetch(req: Request): Promise<Response> {
             try {
                 const url = new URL(req.url);
