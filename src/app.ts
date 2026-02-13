@@ -3,11 +3,12 @@ import { htmlToPdf } from "./service/html-to-pdf.service";
 
 const createServer = (
     port: number,
-    reusePort = false
+    reusePort = false,
 ): ReturnType<typeof serve> => {
     const server = serve({
         port,
         reusePort,
+        idleTimeout: 300, // Allow long-running PDF conversions (default: 10s)
         async fetch(req: Request): Promise<Response> {
             try {
                 const url = new URL(req.url);
