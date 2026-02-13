@@ -17,6 +17,14 @@ APP_WORKER_COUNTER (default "1", max CPU count)
 
 Requires Bun installed.
 
+##### Testing
+
+```bash
+bun run test:e2e
+```
+
+Requires Puppeteer's Chrome: `bunx puppeteer browsers install chrome`
+
 ## HTML to PDF
 
 `localhost:1234/html-to-pdf?url=https://...`
@@ -30,6 +38,7 @@ landscape = false
 background = false
 scale = 1
 event = null
+eventTimeout = 10000
 margin = 0
 lang = "en"
 tz = "Europe/Oslo"

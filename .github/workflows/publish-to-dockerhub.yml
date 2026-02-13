@@ -7,7 +7,34 @@ on:
         branches: [master]
 
 jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+
+            - name: Install Puppeteer browser
+              run: bunx puppeteer browsers install chrome
+
+            - name: Install Chromium dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y \
+                      libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+                      libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+                      libxfixes3 libxrandr2 libgbm1 libasound2
+
+            - name: Run E2E tests
+              run: bun run test:e2e
+
     build:
+        needs: test
         runs-on: ubuntu-latest
         permissions:
             contents: write # Required to push tags

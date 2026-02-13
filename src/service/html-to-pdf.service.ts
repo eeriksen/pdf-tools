@@ -19,19 +19,23 @@ const logRequest = (
         browserLaunch: number;
         pageLoad: number;
         eventWait?: number;
+        eventReceived?: boolean;
         pdfConversion: number;
         total: number;
     },
     resultSizeKb: number,
 ) => {
+    const eventWaitLine =
+        timings.eventWait !== undefined
+            ? `│ ├─ Event wait:      ${formatDuration(timings.eventWait)} (${timings.eventReceived ? "received" : "timed out"})`
+            : null;
+
     const lines = [
         "┌─ HTML-to-PDF ─────────────────────────────────────────",
         `│ URL: ${url}`,
         `│ ├─ Browser launch:  ${formatDuration(timings.browserLaunch)}`,
         `│ ├─ Page load:       ${formatDuration(timings.pageLoad)}`,
-        ...(timings.eventWait !== undefined
-            ? [`│ ├─ Event wait:      ${formatDuration(timings.eventWait)}`]
-            : []),
+        ...(eventWaitLine ? [eventWaitLine] : []),
         `│ ├─ PDF conversion:  ${formatDuration(timings.pdfConversion)}`,
         `│ └─ Total:           ${formatDuration(timings.total)}  →  ${resultSizeKb} KB`,
         "└────────────────────────────────────────────────────────",
@@ -47,6 +51,7 @@ export const htmlToPdf = async (req: Request): Promise<Response> => {
     const background = query.get("background") === "true";
     const scale = parseNumber(query.get("scale"), 1);
     const event = query.get("event");
+    const eventTimeout = parseNumber(query.get("eventTimeout"), 10000);
     const margin = parseNumber(query.get("margin"), 0);
     const lang = query.get("lang") ?? "en";
     const tz = query.get("tz") ?? "Europe/Oslo";
@@ -75,6 +80,11 @@ export const htmlToPdf = async (req: Request): Promise<Response> => {
             "Accept-Language": lang,
         });
 
+        // Set up event listener BEFORE navigation so we don't miss events fired during load
+        const eventWaitPromise = event
+            ? setupEventWait(page, event, eventTimeout)
+            : undefined;
+
         // Page load / rendering
         const startPageLoad = performance.now();
         await page.goto(url, {
@@ -82,12 +92,14 @@ export const htmlToPdf = async (req: Request): Promise<Response> => {
         });
         const pageLoadMs = performance.now() - startPageLoad;
 
-        // Optional event wait
+        // Optional event wait (listener was attached before load)
         let eventWaitMs: number | undefined;
-        if (event) {
+        let eventReceived: boolean | undefined;
+        if (eventWaitPromise) {
             const startEvent = performance.now();
-            await waitForEvent(page, event, 10000);
+            const result = await eventWaitPromise;
             eventWaitMs = performance.now() - startEvent;
+            eventReceived = result.received;
         }
 
         // PDF conversion
@@ -116,7 +128,10 @@ export const htmlToPdf = async (req: Request): Promise<Response> => {
             {
                 browserLaunch: browserLaunchMs,
                 pageLoad: pageLoadMs,
-                ...(eventWaitMs !== undefined && { eventWait: eventWaitMs }),
+                ...(eventWaitMs !== undefined && {
+                    eventWait: eventWaitMs,
+                    eventReceived,
+                }),
                 pdfConversion: pdfConversionMs,
                 total: totalMs,
             },
@@ -143,17 +158,40 @@ export const htmlToPdf = async (req: Request): Promise<Response> => {
     }
 };
 
-async function waitForEvent(page: Page, eventName: string, timeout = 5000) {
-    return Promise.race([
-        page.evaluate(
-            (eventName) =>
-                new Promise((resolve) =>
-                    document.addEventListener(eventName, () => {
-                        resolve(true);
-                    }),
-                ),
-            eventName,
-        ),
-        new Promise((r) => setTimeout(r, timeout)),
-    ]);
+/**
+ * Sets up a listener for a custom DOM event BEFORE page load.
+ * Uses evaluateOnNewDocument so the listener is attached before any page scripts run,
+ * avoiding the race where the event fires during load before we can listen.
+ */
+function setupEventWait(
+    page: Page,
+    eventName: string,
+    timeout = 5000,
+): Promise<{ received: boolean }> {
+    console.log(`Waiting for event: ${eventName}`);
+    return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+            resolve({ received: false });
+        }, timeout);
+
+        page.exposeFunction("__pdfEventFired", () => {
+            clearTimeout(timeoutId);
+            resolve({ received: true });
+        });
+
+        page.evaluateOnNewDocument((name) => {
+            const handler = () => {
+                if (
+                    typeof (
+                        window as unknown as { __pdfEventFired?: () => void }
+                    ).__pdfEventFired === "function"
+                ) {
+                    (
+                        window as unknown as { __pdfEventFired: () => void }
+                    ).__pdfEventFired();
+                }
+            };
+            document.addEventListener(name, handler);
+        }, eventName);
+    });
 }
