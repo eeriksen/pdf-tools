@@ -9,8 +9,13 @@ docker run -p 4321:1234 eeriksen/pdf-tools
 ##### Variables
 
 ```
-PORT (default "1234)
+PORT (default "1234")
+APP_WORKER_COUNTER (default "1", max CPU count)
 ```
+
+##### Local development
+
+Requires Bun installed.
 
 ## HTML to PDF
 

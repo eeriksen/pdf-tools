@@ -10,12 +10,20 @@ jobs:
     build:
         runs-on: ubuntu-latest
         steps:
-            - name: Commit hash
-              id: commit
-              uses: pr-mpt/actions-commit-hash@v2
-
             - name: Checkout
               uses: actions/checkout@v3
+
+            - name: Semantic version
+              id: semver
+              uses: paulhatch/semantic-version@v5
+              with:
+                  tag_prefix: ""
+                  major_pattern: "/^feat(\\([\\w\\-\\.]+\\))?!: ([\\w ])+([\\s\\S]*)$/"
+                  minor_pattern: "/^feat(\\([\\w\\-\\.]+\\))?: ([\\w ])+([\\s\\S]*)$/"
+                  version_format: ${major}.${minor}.${patch}
+                  enable_prerelease_mode: false
+                  search_commit_body: true
+                  bump_each_commit: true
 
             - name: Set up QEMU
               uses: docker/setup-qemu-action@v2
@@ -36,4 +44,4 @@ jobs:
                   context: .
                   platforms: linux/amd64,linux/arm64
                   push: true
-                  tags: eeriksen/pdf-tools:latest, eeriksen/pdf-tools:${{ steps.commit.outputs.short }}
+                  tags: eeriksen/pdf-tools:latest, eeriksen/pdf-tools:${{ steps.semver.outputs.version }}

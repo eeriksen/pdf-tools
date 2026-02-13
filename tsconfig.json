@@ -12,6 +12,7 @@
         "noImplicitAny": true,
         "skipLibCheck": true,
         "moduleResolution": "node",
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "types": ["bun-types"]
     }
 }

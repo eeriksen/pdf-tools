@@ -1,21 +1,36 @@
-import express, { Application, Express, Request, Response } from "express";
+import { serve } from "bun";
 import { htmlToPdf } from "./service/html-to-pdf.service";
 
-const createServer = (): Application => {
-    const app: Express = express();
-    app.use(express.json());
-
-    app.get("/html-to-pdf", htmlToPdf);
-    app.get("/favicon.ico", (_, res: Response) => res.status(204).end());
-    app.get("/ping", (_, res: Response) => res.send("pong"));
-
-    // Error handler
-    app.use((err: Error, req: Request, res: Response) => {
-        console.error(err.stack);
-        res.status(500).send(`Error: ${err.message}`);
+const createServer = (
+    port: number,
+    reusePort = false
+): ReturnType<typeof serve> => {
+    const server = serve({
+        port,
+        reusePort,
+        async fetch(req: Request): Promise<Response> {
+            try {
+                const url = new URL(req.url);
+                if (url.pathname === "/html-to-pdf") {
+                    return await htmlToPdf(req);
+                }
+                if (url.pathname === "/favicon.ico") {
+                    return new Response(null, { status: 204 });
+                }
+                if (url.pathname === "/ping") {
+                    return new Response("pong");
+                }
+                return new Response("Not found", { status: 404 });
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : "Unknown error";
+                console.error(error);
+                return new Response(`Error: ${message}`, { status: 500 });
+            }
+        },
     });
 
-    return app;
+    return server;
 };
 
 export { createServer };

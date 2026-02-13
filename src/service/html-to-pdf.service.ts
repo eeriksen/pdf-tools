@@ -1,40 +1,64 @@
-import { Request, Response, NextFunction } from "express";
 import puppeteer, { Page, PaperFormat } from "puppeteer";
 
-export const htmlToPdf = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
+const parseNumber = (value: string | null, fallback: number) => {
+    if (value === null) {
+        return fallback;
+    }
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const formatDuration = (ms: number): string => {
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+};
+
+const logRequest = (
+    url: string,
+    timings: {
+        browserLaunch: number;
+        pageLoad: number;
+        eventWait?: number;
+        pdfConversion: number;
+        total: number;
+    },
+    resultSizeKb: number,
 ) => {
-    const {
-        url,
-        format = "A4",
-        landscape = false,
-        background = false,
-        scale = 1,
-        event = null,
-        margin = 0,
-        lang = "en",
-        tz = "Europe/Oslo",
-    } = req.query as unknown as {
-        url?: string;
-        format: PaperFormat;
-        landscape: string;
-        background: string;
-        scale: number;
-        event: string | null;
-        margin: number;
-        lang: string;
-        tz: string;
-    };
+    const lines = [
+        "┌─ HTML-to-PDF ─────────────────────────────────────────",
+        `│ URL: ${url}`,
+        `│ ├─ Browser launch:  ${formatDuration(timings.browserLaunch)}`,
+        `│ ├─ Page load:       ${formatDuration(timings.pageLoad)}`,
+        ...(timings.eventWait !== undefined
+            ? [`│ ├─ Event wait:      ${formatDuration(timings.eventWait)}`]
+            : []),
+        `│ ├─ PDF conversion:  ${formatDuration(timings.pdfConversion)}`,
+        `│ └─ Total:           ${formatDuration(timings.total)}  →  ${resultSizeKb} KB`,
+        "└────────────────────────────────────────────────────────",
+    ];
+    console.log(lines.join("\n"));
+};
+
+export const htmlToPdf = async (req: Request): Promise<Response> => {
+    const query = new URL(req.url).searchParams;
+    const url = query.get("url") ?? undefined;
+    const format = (query.get("format") ?? "A4") as PaperFormat;
+    const landscape = query.get("landscape") === "true";
+    const background = query.get("background") === "true";
+    const scale = parseNumber(query.get("scale"), 1);
+    const event = query.get("event");
+    const margin = parseNumber(query.get("margin"), 0);
+    const lang = query.get("lang") ?? "en";
+    const tz = query.get("tz") ?? "Europe/Oslo";
+    const startTotal = performance.now();
+
     try {
-        // Check URL
         if (!url) {
-            return next(new Error("Missing parameter: url"));
-        } else {
-            console.log(`Converting URL to PDF (${lang}): ${url}`);
+            return new Response("Missing parameter: url", { status: 400 });
         }
 
+        // Browser launch
+        const startBrowser = performance.now();
         const browser = await puppeteer.launch({
             args: [
                 "--no-sandbox",
@@ -43,6 +67,7 @@ export const htmlToPdf = async (
             ],
             env: { LANG: lang, LANGUAGE: lang },
         });
+        const browserLaunchMs = performance.now() - startBrowser;
 
         const page = await browser.newPage();
         await page.emulateTimezone(tz);
@@ -50,21 +75,27 @@ export const htmlToPdf = async (
             "Accept-Language": lang,
         });
 
+        // Page load / rendering
+        const startPageLoad = performance.now();
         await page.goto(url, {
             waitUntil: "networkidle2",
         });
+        const pageLoadMs = performance.now() - startPageLoad;
 
-        event &&
-            (await waitForEvent(page, event, 10000).then((result) => {
-                if (result) {
-                    console.log("- Received ready event.");
-                }
-            }));
+        // Optional event wait
+        let eventWaitMs: number | undefined;
+        if (event) {
+            const startEvent = performance.now();
+            await waitForEvent(page, event, 10000);
+            eventWaitMs = performance.now() - startEvent;
+        }
 
+        // PDF conversion
+        const startPdf = performance.now();
         const response = await page.pdf({
             format,
-            landscape: landscape === "true",
-            printBackground: background === "true",
+            landscape,
+            printBackground: background,
             scale,
             margin: {
                 top: margin,
@@ -73,20 +104,42 @@ export const htmlToPdf = async (
                 right: margin,
             },
         });
-
-        console.log(`- Done. ${Math.ceil(response?.length / 1024)} Kb`);
+        const pdfConversionMs = performance.now() - startPdf;
 
         await browser.close();
-        res.setHeader("Content-Type", "application/pdf");
-        res.send(response);
+
+        const totalMs = performance.now() - startTotal;
+        const resultSizeKb = Math.ceil(response?.length / 1024);
+
+        logRequest(
+            url,
+            {
+                browserLaunch: browserLaunchMs,
+                pageLoad: pageLoadMs,
+                ...(eventWaitMs !== undefined && { eventWait: eventWaitMs }),
+                pdfConversion: pdfConversionMs,
+                total: totalMs,
+            },
+            resultSizeKb,
+        );
+
+        return new Response(new Uint8Array(response), {
+            headers: {
+                "Content-Type": "application/pdf",
+            },
+        });
     } catch (e: unknown) {
+        const totalMs = performance.now() - startTotal;
         let message = "Unknown error. Check the logs.";
         if (typeof e === "string") {
             message = e;
         } else if (e instanceof Error) {
             message = e.message;
         }
-        res.status(500).send(message);
+        console.error(
+            `[HTML-to-PDF] FAILED after ${formatDuration(totalMs)} | URL: ${url ?? "N/A"} | ${message}`,
+        );
+        return new Response(message, { status: 500 });
     }
 };
 
@@ -97,9 +150,9 @@ async function waitForEvent(page: Page, eventName: string, timeout = 5000) {
                 new Promise((resolve) =>
                     document.addEventListener(eventName, () => {
                         resolve(true);
-                    })
+                    }),
                 ),
-            eventName
+            eventName,
         ),
         new Promise((r) => setTimeout(r, timeout)),
     ]);

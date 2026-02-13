@@ -7,25 +7,21 @@ dotenv.config();
 
 const { PORT, APP_WORKER_COUNTER } = process.env;
 
-const startWorker = async () => {
-    // Initialize app server
-    const app = createServer();
-    const server = app.listen(PORT, () => {
-        console.log(`Listening to port ${PORT}`);
-    });
+const startWorker = () => {
+    const port = PORT ? Number(PORT) : 3000;
+    const reusePort = numberOfWorkers > 1;
+    const server = createServer(port, reusePort);
+    console.log(`Listening to port ${port} (pid ${process.pid})`);
 
-    // Error handler
     const signalTraps: Array<string> = ["SIGTERM", "SIGINT", "SIGUSR2"];
     signalTraps.forEach((type) => {
-        process.once(type, async () => {
-            server.close(() => {
-                console.log("HTTP Server closed");
-            });
+        process.once(type, () => {
+            server.stop();
+            console.log("HTTP Server closed");
         });
     });
 };
 
-// Initialize cluster
 const numberOfWorkers = APP_WORKER_COUNTER
     ? Math.min(parseInt(APP_WORKER_COUNTER, 10), cpus().length)
     : 1;
@@ -33,7 +29,6 @@ const numberOfWorkers = APP_WORKER_COUNTER
 if (cluster.isPrimary) {
     console.log(`CLUSTER: Primary ${process.pid} is running`);
 
-    // Fork workers.
     for (let i = 0; i < numberOfWorkers; i++) {
         cluster.fork();
     }
